@@ -228,8 +228,12 @@ skip_piddb:;
                     RtlInitUnicodeString( &target, vuln_drivers[j] );
                     if ( RtlCompareUnicodeString( &drivers[i].Name, &target, TRUE ) == 0 )
                     {
-                        RtlFreeUnicodeString( &drivers[i].Name );
-                        RtlZeroMemory( &drivers[i], sizeof( MM_UNLOADED_DRIVER ) );
+                        // Don't RtlFreeUnicodeString — these buffers aren't heap-allocated
+                        // and freeing them causes BSOD. Just zero the entry.
+                        drivers[i].Name.Length = 0;
+                        drivers[i].Name.MaximumLength = 0;
+                        drivers[i].Name.Buffer = nullptr;
+                        RtlZeroMemory( &drivers[i].ModuleStart, sizeof( MM_UNLOADED_DRIVER ) - offsetof( MM_UNLOADED_DRIVER, ModuleStart ) );
                         break;
                     }
                 }

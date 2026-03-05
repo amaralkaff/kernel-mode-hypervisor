@@ -65,6 +65,22 @@ namespace dse
 	//   cmp dword ptr [CiOptions], 0    =>  83 3D xx xx xx xx 00
 	//   or
 	//   mov eax, [CiOptions]            =>  8B 05 xx xx xx xx
+	// check if a range is safe to read (skips discarded .INIT pages)
+	inline bool is_range_valid( void* addr, size_t len )
+	{
+		uint8_t* p = ( uint8_t* ) addr;
+		uint8_t* end = p + len;
+		// check each page boundary
+		while ( p < end )
+		{
+			if ( !MmIsAddressValid( p ) )
+				return false;
+			// advance to next page
+			p = ( uint8_t* ) ( ( ( uint64_t ) p + 0x1000 ) & ~0xFFFULL );
+		}
+		return true;
+	}
+
 	inline uint64_t find_ci_options( uint64_t ci_base, size_t ci_size )
 	{
 		if ( !ci_base || !ci_size )
@@ -72,23 +88,28 @@ namespace dse
 
 		uint8_t* base = ( uint8_t* ) ci_base;
 
-		// look for: mov eax, dword ptr [CiOptions] (8B 05 xx xx xx xx)
-		// followed by test/cmp patterns near CiValidateImageHeader
-		for ( size_t i = 0; i + 6 < ci_size; i++ )
+		for ( size_t i = 0; i + 7 < ci_size; i++ )
 		{
+			// skip pages that are not mapped (discarded .INIT sections)
+			if ( ( i & 0xFFF ) == 0 && !MmIsAddressValid( &base[i] ) )
+			{
+				i = ( i + 0x1000 ) & ~0xFFFULL;
+				i--; // loop will i++
+				continue;
+			}
+
 			// pattern: 83 3D xx xx xx xx 06 (cmp [CiOptions], 6)
 			if ( base[i] == 0x83 && base[i + 1] == 0x3D && base[i + 6] == 0x06 )
 			{
 				int32_t rel = *( int32_t* ) ( &base[i + 2] );
 				uint64_t addr = ( uint64_t ) ( &base[i + 7] ) + rel;
 
-				// sanity: should be within ci.dll
-				if ( addr >= ci_base && addr < ci_base + ci_size )
+				if ( addr >= ci_base && addr < ci_base + ci_size && MmIsAddressValid( ( void* ) addr ) )
 				{
 					uint32_t val = *( uint32_t* ) addr;
 					if ( val == 0x6 || val == 0x8006 )
 					{
-						log::dbg_print( "dse: CiOptions found via cmp pattern at 0x%llx (val=0x%x)", addr, val );
+						log::dbg_print( "dse: CiOptions found via cmp at 0x%llx (val=0x%x)", addr, val );
 						return addr;
 					}
 				}
@@ -100,12 +121,12 @@ namespace dse
 				int32_t rel = *( int32_t* ) ( &base[i + 2] );
 				uint64_t addr = ( uint64_t ) ( &base[i + 6] ) + rel;
 
-				if ( addr >= ci_base && addr < ci_base + ci_size )
+				if ( addr >= ci_base && addr < ci_base + ci_size && MmIsAddressValid( ( void* ) addr ) )
 				{
 					uint32_t val = *( uint32_t* ) addr;
 					if ( val == 0x6 || val == 0x8006 )
 					{
-						log::dbg_print( "dse: CiOptions found via mov pattern at 0x%llx (val=0x%x)", addr, val );
+						log::dbg_print( "dse: CiOptions found via mov at 0x%llx (val=0x%x)", addr, val );
 						return addr;
 					}
 				}
@@ -117,12 +138,12 @@ namespace dse
 				int32_t rel = *( int32_t* ) ( &base[i + 2] );
 				uint64_t addr = ( uint64_t ) ( &base[i + 6] ) + rel;
 
-				if ( addr >= ci_base && addr < ci_base + ci_size )
+				if ( addr >= ci_base && addr < ci_base + ci_size && MmIsAddressValid( ( void* ) addr ) )
 				{
 					uint32_t val = *( uint32_t* ) addr;
 					if ( val == 0x6 || val == 0x8006 )
 					{
-						log::dbg_print( "dse: CiOptions found via mov-store pattern at 0x%llx (val=0x%x)", addr, val );
+						log::dbg_print( "dse: CiOptions found via mov-store at 0x%llx (val=0x%x)", addr, val );
 						return addr;
 					}
 				}

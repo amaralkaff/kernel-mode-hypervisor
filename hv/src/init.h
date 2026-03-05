@@ -87,10 +87,9 @@ namespace init
 		if ( !comm::cache_system_process( ) )
 			log::dbg_print( "vmhv: cache_system_process failed (attach will use PsLookup fallback)" );
 
-		// dse::init() disabled — pattern scanning ci.dll can hit paged sections and BSOD
-		// TODO: wrap with __try/__except or use MmIsAddressValid before scanning
-		// if ( !dse::init( ) )
-		//     log::dbg_print( "vmhv: dse::init failed (DSE commands will be unavailable)" );
+		// find CiOptions for DSE manipulation (scan wrapped in __try/__except)
+		if ( !dse::init( ) )
+			log::dbg_print( "vmhv: dse::init failed (DSE commands will be unavailable)" );
 
 		uint32_t core_count = KeQueryActiveProcessorCountEx( ALL_PROCESSOR_GROUPS );
 
